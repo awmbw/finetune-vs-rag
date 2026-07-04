@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+[project]
+name = "finetune-vs-rag-lab"
+version = "0.1.0"
+description = "MLOps benchmarking pipeline: LoRA fine-tuned LLM vs RAG baseline with automated evaluation"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.1.0",
+    "transformers>=4.36.0",
+    "peft>=0.7.0",
+    "datasets>=2.16.0",
+    "accelerate>=0.25.0",
+    "bitsandbytes>=0.41.0",
+    "chromadb>=0.4.0",
+    "sentence-transformers>=2.2.0",
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    "pyyaml>=6.0",
+    "ragas>=0.1.0",
+    "langchain>=0.1.0",
+]
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.1.0",
+    "pre-commit>=3.5.0",
+]
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+

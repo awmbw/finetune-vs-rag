@@ -1,0 +1,46 @@
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*.so
+# Virtual environments
+venv/
+.venv/
+env/
+# Distribution & build
+build/
+dist/
+*.egg-info/
+# Model files — NEVER commit these (too large)
+*.bin
+*.safetensors
+*.gguf
+*.pt
+*.pth
+*.onnx
+models/
+# Data — raw and processed data (tracked via DVC or stored externally)
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+# Environment & secrets
+.env
+.env.local
+*.key
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+# Jupyter
+.ipynb_checkpoints/
+# Logs & results (regeneratable)
+*.log
+results/*.png
+results/*.csv
+results/*.json
+wandb/
+# Personal / AI Context Files (DO NOT COMMIT)
+ANTIGRAVITY_CONTEXT.md
+interview_prep_qa.md

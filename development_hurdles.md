@@ -61,3 +61,65 @@
 **STAR Format:** *Identified 76 data leakage instances between train/eval splits through automated validation harness, implemented deduplication pipeline reducing 33,955 raw records to clean, leak-free datasets ensuring scientifically valid benchmarking results.*
 
 ---
+
+## Hurdle #4 — Mixed Precision Type Mismatch (BFloat16 vs FP16)
+
+🟢 **Resolved**
+
+**Problem:** Training crashed immediately with `NotImplementedError: "_amp_foreach_non_finite_check_and_unscale_cuda" not implemented for 'BFloat16'`.
+
+**Impact:** Unable to begin the training loop.
+
+**Root Cause:** Mixed precision type mismatch between the QLoRA configuration and the Trainer configuration. The model was quantized with `bnb_4bit_compute_dtype=torch.bfloat16`, but the HuggingFace `SFTTrainer` was initialized with `fp16=True`. The PyTorch Automatic Mixed Precision (AMP) scaler attempted to unscale `bfloat16` gradients using an `fp16` function, causing the crash.
+
+**Fix:** Changed `fp16=True` to `bf16=True` in the `SFTConfig` arguments inside `train.py`. Since the RTX 5060 uses the modern Ada Lovelace architecture, it natively supports `bfloat16`, which is superior for training stability compared to standard `fp16`.
+
+💡 **Lesson Learned:** Always ensure your compute data types match across all layers of the training stack (Model loading, QLoRA config, and Trainer config). `bfloat16` should be the default for all modern GPUs (Ampere architecture and newer).
+
+**STAR Format:** *Diagnosed and resolved a complex Automatic Mixed Precision (AMP) type mismatch between QLoRA gradient configurations and HuggingFace SFTTrainer arguments, preventing an immediate training crash and ensuring stable bfloat16 optimization on consumer hardware.*
+
+---
+
+## Hurdle #5 — TRL/Transformers API Breaking Changes (3 cascading failures)
+
+🟢 **Resolved**
+
+**Problem:** Training script crashed three times in a row with `TypeError` errors — `max_seq_length` was not recognized, `warmup_ratio` was deprecated, and `tokenizer` was no longer a valid keyword argument for `SFTTrainer`.
+
+**Impact:** Unable to initialize the training loop despite correct model loading and data preparation.
+
+**Root Cause:** We installed `trl==1.7.1` and `transformers==5.13.0`, which are bleeding-edge releases. Most online tutorials and documentation reference older API signatures. The library maintainers renamed several arguments between versions:
+- `max_seq_length` → `max_length`
+- `warmup_ratio` → `warmup_steps`
+- `tokenizer` → `processing_class`
+
+**Fix:** Updated all three arguments in `train.py` to match the current API. Each fix was iterative — run, read the error, fix, repeat.
+
+💡 **Lesson Learned:** ML libraries (especially HuggingFace ecosystem) move extremely fast. Never blindly copy training code from tutorials — always check the installed library version and cross-reference the current API docs. Pin your dependency versions in `pyproject.toml` for reproducibility.
+
+**STAR Format:** *Resolved three cascading API compatibility failures across the HuggingFace TRL and Transformers training stack by systematically reading error messages and updating deprecated function signatures, enabling successful QLoRA training on bleeding-edge library versions.*
+
+---
+
+## Hurdle #6 — Model Merge Crash (Meta Device Offloading + Tied Weights Bug)
+
+🟢 **Resolved**
+
+**Problem:** After successful training, the merge script (`merge.py`) crashed during `save_pretrained()` with `AttributeError: 'list' object has no attribute 'keys'`. Additionally, warnings indicated model parameters were on a "meta device" due to offloading.
+
+**Impact:** Unable to save the merged model, blocking the entire downstream pipeline (evaluation, serving).
+
+**Root Cause:** Two compounding issues:
+1. **Meta Device Offloading:** Using `device_map="auto"` attempted to load the full 7.6GB bfloat16 model onto the 8GB GPU. Insufficient VRAM caused PyTorch to offload layers to a virtual "meta device," corrupting the save process.
+2. **Transformers 5.x Bug:** The `_get_tied_weight_keys()` function in `transformers==5.13.0` expects tied weight keys to be a `dict`, but Phi-3.5's custom model code returns a `list`, causing the `AttributeError`.
+
+**Fix:** 
+- Removed `device_map="auto"` to load the model entirely on CPU RAM (22GB available, only ~7.6GB needed). GPU is not required for weight merging.
+- Patched `merged_model._tied_weights_keys = None` to bypass the tied weights serialization bug.
+- Added `max_shard_size="2GB"` to save in smaller chunks, reducing peak memory during serialization.
+
+💡 **Lesson Learned:** Not every step in an ML pipeline needs a GPU. Merge operations are pure linear algebra on weight matrices — CPU RAM is sufficient and avoids GPU memory contention. When encountering framework bugs in bleeding-edge versions, reading the traceback and applying targeted monkey-patches is a valid production strategy.
+
+**STAR Format:** *Diagnosed and resolved a compound failure during model weight merging caused by GPU memory offloading and a framework serialization bug in transformers 5.x, implementing CPU-only loading and a targeted monkey-patch to successfully produce a standalone fine-tuned Medical LLM.*
+
+---

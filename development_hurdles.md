@@ -123,3 +123,21 @@
 **STAR Format:** *Diagnosed and resolved a compound failure during model weight merging caused by GPU memory offloading and a framework serialization bug in transformers 5.x, implementing CPU-only loading and a targeted monkey-patch to successfully produce a standalone fine-tuned Medical LLM.*
 
 ---
+
+## Hurdle #7 — DynamicCache Incompatibility During Inference (KV Cache Bug)
+
+🟢 **Resolved**
+
+**Problem:** RAG generation crashed with `AttributeError: 'DynamicCache' object has no attribute 'seen_tokens'` when calling `model.generate()`.
+
+**Impact:** Blocked the entire RAG generation pipeline — retrieval worked but the model could not produce any output.
+
+**Root Cause:** Phi-3.5's custom model code (downloaded via `trust_remote_code=True`) references `past_key_values.seen_tokens` for KV cache management. In `transformers==5.13.0`, the `DynamicCache` class was refactored and this attribute was renamed/removed, breaking the custom code's assumptions.
+
+**Fix:** Added `use_cache=False` to the `model.generate()` call. This disables KV caching entirely during generation, bypassing the incompatible `DynamicCache` code path. The tradeoff is slightly slower token-by-token generation, but for short medical answers (≤256 tokens) the difference is negligible.
+
+💡 **Lesson Learned:** Using `trust_remote_code=True` downloads and executes Python code from the model's HuggingFace repository. This custom code may be outdated relative to the installed `transformers` version, creating version skew bugs. In production, pin both the model revision AND the library version.
+
+**STAR Format:** *Resolved a KV cache incompatibility between Phi-3.5's custom model code and transformers 5.x by disabling cache during inference, unblocking the RAG generation pipeline while maintaining answer quality.*
+
+---

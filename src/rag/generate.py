@@ -9,6 +9,13 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from src.rag.retrieve import get_retriever, retrieve
 
+# --- Monkey-Patch Transformers 5.x KV Cache Bug ---
+from transformers.cache_utils import DynamicCache
+if not hasattr(DynamicCache, "seen_tokens"):
+    DynamicCache.seen_tokens = property(lambda self: self.get_seq_length())
+if not hasattr(DynamicCache, "get_usable_length"):
+    DynamicCache.get_usable_length = lambda self, new_seq_length, layer_idx=0: self.get_seq_length()
+
 # --- Configuration ---
 BASE_MODEL = "microsoft/Phi-3.5-mini-instruct"
 
@@ -70,7 +77,7 @@ def rag_answer(question: str, model, tokenizer, collection, embedder, top_k=3):
             max_new_tokens=256,
             temperature=0.1,       # Low temperature = more deterministic
             do_sample=True,
-            use_cache=False        # Avoids DynamicCache bug in transformers 5.x
+            use_cache=False # Reverting to False due to deep Attention matrix bugs in transformers 5.x
         )
 
     

@@ -15,9 +15,15 @@ from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from src.evaluate.metrics import compute_rouge_l, compute_exact_match
 
-# RAG imports
 from src.rag.retrieve import get_retriever
 from src.rag.generate import rag_answer
+
+# --- Monkey-Patch Transformers 5.x KV Cache Bug ---
+from transformers.cache_utils import DynamicCache
+if not hasattr(DynamicCache, "seen_tokens"):
+    DynamicCache.seen_tokens = property(lambda self: self.get_seq_length())
+if not hasattr(DynamicCache, "get_usable_length"):
+    DynamicCache.get_usable_length = lambda self, new_seq_length, layer_idx=0: self.get_seq_length()
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 EVAL_DATA_PATH = PROJECT_ROOT / "data" / "eval" / "eval_set.jsonl"
@@ -26,7 +32,7 @@ RESULTS_DIR.mkdir(exist_ok=True)
 
 BASE_MODEL = "microsoft/Phi-3.5-mini-instruct"
 MERGED_MODEL = str(PROJECT_ROOT / "models" / "phi3-medical-merged")
-NUM_SAMPLES = 10  # Reduced to 10 for speed during the lab
+NUM_SAMPLES = 500  # Increased for robust statistical evaluation
 
 
 def load_model(mode: str):
@@ -101,7 +107,7 @@ def main():
                     max_new_tokens=256,
                     temperature=0.1,
                     do_sample=True,
-                    use_cache=False # Bypass the framework bug
+                    use_cache=False # Reverting to False due to deep Attention matrix bugs in transformers 5.x
                 )
             prediction = tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 
